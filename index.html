@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisador de Resultados da Quina</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        /* Estilo para a fonte Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Animação do spinner */
+        .spinner {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        /* Estilo para o marcador do <details> */
+        summary::-webkit-details-marker {
+           display: none;
+        }
+        summary::after {
+            content: '▼';
+            font-size: 0.8em;
+            transition: transform 0.2s;
+        }
+        details[open] > summary::after {
+            transform: rotate(180deg);
+        }
+        /* Estilo para botão desativado */
+        button:disabled {
+            background-color: #9ca3af; /* Cinza do Tailwind */
+            opacity: 0.8;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex items-start justify-center min-h-screen p-4 sm:p-6">
+
+    <main class="w-full max-w-3xl mx-auto space-y-8">
+        <!-- Cabeçalho -->
+        <header class="text-center">
+            <h1 class="text-4xl font-bold text-slate-900">🎯 Analisador da Quina</h1>
+            <p class="mt-2 text-lg text-slate-600">Faça o upload do histórico e informe seus números para ver o desempenho.</p>
+        </header>
+
+        <!-- Card de Entrada de Dados -->
+        <section class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-200">
+            <div class="space-y-6">
+                <!-- Upload do CSV -->
+                <div class="input-group">
+                    <label for="csv-file" class="block text-sm font-semibold mb-2 text-slate-700">1. Histórico de Concursos (.csv)</label>
+                    <input type="file" id="csv-file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors duration-200 cursor-pointer">
+                </div>
+
+                <!-- Entrada da Sequência -->
+                <div class="input-group">
+                    <label for="user-numbers" class="block text-sm font-semibold mb-2 text-slate-700">2. Sua Sequência (5 a 15 números)</label>
+                    <input type="text" id="user-numbers" placeholder="Ex: 5, 12, 25, 43, 67, 78" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow duration-200">
+                    <p id="numbers-counter" class="text-sm text-slate-500 mt-2 text-right h-5"></p>
+                </div>
+            </div>
+
+            <!-- Botão de Análise -->
+            <button id="analyze-btn" class="mt-8 w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transform hover:-translate-y-0.5 transition-all duration-200 shadow-md">
+                Analisar Resultados
+            </button>
+        </section>
+
+        <!-- Indicador de Carregamento (Spinner) -->
+        <div id="loader" class="hidden flex-col items-center justify-center space-y-4 py-8">
+            <div class="spinner w-12 h-12 border-4 border-slate-200 rounded-full"></div>
+            <p class="text-slate-600 font-medium">Buscando sugestão...</p>
+        </div>
+
+        <!-- Mensagem de Erro -->
+        <div id="error-message" class="hidden p-4 bg-red-100 text-red-800 border-l-4 border-red-500 rounded-r-lg text-center font-medium"></div>
+
+        <!-- Seção de Resultados -->
+        <section id="results-section" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-200 space-y-8">
+            <h2 class="text-2xl font-bold text-slate-900 border-b-2 border-slate-200 pb-4">📊 Resumo da Análise</h2>
+            <!-- Div para a análise de distribuição -->
+            <div id="distribution-analysis"></div>
+            <!-- Resumo dos Acertos -->
+            <div id="summary-results" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <!-- O conteúdo do resumo será inserido aqui pelo JS -->
+            </div>
+            <!-- Detalhes dos Concursos -->
+            <div id="detailed-results" class="space-y-4">
+                <!-- As listas suspensas serão inseridas aqui pelo JS -->
+            </div>
+             <!-- Seção de Sugestão de Jogo -->
+            <div id="suggestion-section" class="hidden pt-6 mt-6 border-t border-slate-200">
+                <!-- Conteúdo da sugestão será inserido aqui pelo JS -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const csvFileInput = document.getElementById('csv-file');
+            const userNumbersInput = document.getElementById('user-numbers');
+            const analyzeBtn = document.getElementById('analyze-btn');
+            const loader = document.getElementById('loader');
+            const errorMessageDiv = document.getElementById('error-message');
+            const resultsSection = document.getElementById('results-section');
+            const distributionAnalysisDiv = document.getElementById('distribution-analysis');
+            const summaryResultsDiv = document.getElementById('summary-results');
+            const detailedResultsDiv = document.getElementById('detailed-results');
+            const suggestionSection = document.getElementById('suggestion-section');
+            const numbersCounter = document.getElementById('numbers-counter');
+            
+            let fullHistoryCache = [];
+            let lastSuggestion = null;
+
+            analyzeBtn.addEventListener('click', handleAnalysis);
+
+            userNumbersInput.addEventListener('input', () => {
+                const numbersStr = userNumbersInput.value;
+                const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n);
+                const count = numbersArray.length;
+
+                if (count === 0) {
+                    numbersCounter.textContent = '';
+                    return;
+                }
+                
+                numbersCounter.textContent = `Você digitou: ${count} Dezena(s)`;
+
+                if (count >= 5 && count <= 15) {
+                    numbersCounter.classList.remove('text-red-500');
+                    numbersCounter.classList.add('text-slate-500');
+                } else {
+                    numbersCounter.classList.remove('text-slate-500');
+                    numbersCounter.classList.add('text-red-500');
+                }
+            });
+
+            function handleAnalysis() {
+                resetUI();
+                lastSuggestion = null;
+                const file = csvFileInput.files[0];
+                const userNumbersStr = userNumbersInput.value;
+                const validationResult = validateInputs(file, userNumbersStr);
+                if (!validationResult.isValid) {
+                    showError(validationResult.message);
+                    return;
+                }
+                const userNumbers = validationResult.numbers;
+                loader.classList.remove('hidden');
+                loader.classList.add('flex');
+                loader.querySelector('p').textContent = 'Analisando... por favor, aguarde.';
+                setTimeout(() => parseCsv(file, userNumbers), 200);
+            }
+
+            function validateInputs(file, numbersStr) {
+                if (!file) return { isValid: false, message: 'Por favor, selecione um arquivo CSV.' };
+                if (!numbersStr.trim()) return { isValid: false, message: 'Por favor, insira uma sequência de números.' };
+                const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n !== '').map(n => parseInt(n, 10));
+                if (numbersArray.some(isNaN)) return { isValid: false, message: 'Sua sequência contém valores inválidos.' };
+                if (numbersArray.length < 5 || numbersArray.length > 15) return { isValid: false, message: 'A sequência deve conter entre 5 e 15 números.' };
+                const uniqueNumbers = new Set(numbersArray);
+                if (uniqueNumbers.size !== numbersArray.length) return { isValid: false, message: 'Sua sequência contém números duplicados.' };
+                for (const num of uniqueNumbers) {
+                    if (num < 1 || num > 80) return { isValid: false, message: `O número ${num} está fora do intervalo válido (1 a 80).` };
+                }
+                return { isValid: true, numbers: Array.from(uniqueNumbers) };
+            }
+
+            function parseCsv(file, userNumbers) {
+                analyzeBtn.disabled = true; // Desativa o botão principal
+                Papa.parse(file, {
+                    complete: (results) => {
+                        loader.classList.add('hidden');
+                        loader.classList.remove('flex');
+                        fullHistoryCache = results.data
+                            .map(row => {
+                                if (row.length < 7) return null;
+                                const contestNumber = parseInt(row[0], 10);
+                                if (isNaN(contestNumber)) return null;
+                                const drawnNumbers = row.slice(2, 7).map(n => parseInt(n, 10));
+                                if (drawnNumbers.length !== 5 || drawnNumbers.some(n => isNaN(n) || n < 1 || n > 80)) return null;
+                                return { number: contestNumber, date: row[1], drawn: drawnNumbers };
+                            }).filter(Boolean);
+                        if (fullHistoryCache.length === 0) {
+                            showError('Nenhum concurso válido foi encontrado no arquivo CSV. Verifique o formato.');
+                            analyzeBtn.disabled = false; // Reativa em caso de erro
+                            return;
+                        }
+                        const analysis = processContests(userNumbers);
+                        displayResults(analysis, userNumbers);
+                        analyzeBtn.disabled = false; // Reativa após o sucesso
+                    },
+                    error: (err) => {
+                        loader.classList.add('hidden');
+                        loader.classList.remove('flex');
+                        showError(`Ocorreu um erro ao ler o arquivo CSV: ${err.message}`);
+                        analyzeBtn.disabled = false; // Reativa em caso de erro
+                    },
+                    skipEmptyLines: true,
+                });
+            }
+            
+            function processContests(userNumbers) {
+                const resultsByHits = { 5: [], 4: [], 3: [], 2: [] };
+                const userNumbersSet = new Set(userNumbers);
+                for (const contest of fullHistoryCache) {
+                    const hits = contest.drawn.filter(num => userNumbersSet.has(num)).length;
+                    if (hits >= 2) {
+                        resultsByHits[hits].push({ number: contest.number, date: contest.date, hits, drawn: contest.drawn });
+                    }
+                }
+                return { resultsByHits };
+            }
+
+            function checkDistribution(sequence) {
+                const decades = Array(8).fill(0);
+                for (const num of sequence) {
+                    const decadeIndex = Math.floor((num - 1) / 10);
+                    if (decadeIndex >= 0 && decadeIndex < 8) decades[decadeIndex]++;
+                }
+                const hasEmptyDecades = decades.some(count => count === 0);
+                const hasOverpopulatedDecades = decades.some(count => count > 3);
+
+                let status = 'uniform';
+                if (hasEmptyDecades) {
+                    status = 'concentrated';
+                } else if (hasOverpopulatedDecades) {
+                    status = 'doubtful';
+                }
+                return { status, decades };
+            }
+
+            function displayResults(analysis, userNumbers) {
+                const { resultsByHits } = analysis;
+                const summaryMapping = { 5: 'Quina', 4: 'Quadra', 3: 'Terno', 2: 'Duque' };
+                const hitOrder = [5, 4, 3, 2];
+
+                distributionAnalysisDiv.innerHTML = '';
+                const distribution = checkDistribution(userNumbers);
+                const decadesText = distribution.decades.map((count, i) => `<strong>${i*10+1}-${(i+1)*10}</strong>: ${count}`).join(' | ');
+                const distributionDiv = document.createElement('div');
+                distributionDiv.className = 'p-4 rounded-lg mb-6 text-center border';
+                if (distribution.status === 'uniform') {
+                    distributionDiv.classList.add('bg-green-50', 'text-green-800', 'border-green-200');
+                    distributionDiv.innerHTML = `<p class="font-semibold">✅ Distribuição Uniforme</p><p class="text-sm mt-2">${decadesText}</p>`;
+                } else if (distribution.status === 'doubtful') {
+                    distributionDiv.classList.add('bg-yellow-50', 'text-yellow-800', 'border-yellow-200');
+                    distributionDiv.innerHTML = `<p class="font-semibold">🤔 Distribuição Duvidosa</p><p class="text-sm mt-2">${decadesText}</p>`;
+                } else {
+                    distributionDiv.classList.add('bg-amber-50', 'text-amber-800', 'border-amber-200');
+                    distributionDiv.innerHTML = `<p class="font-semibold">⚠️ Distribuição Concentrada</p><p class="text-sm mt-2">${decadesText}</p>`;
+                }
+                distributionAnalysisDiv.appendChild(distributionDiv);
+
+                summaryResultsDiv.innerHTML = '';
+                hitOrder.forEach(hitCount => {
+                    const count = resultsByHits[hitCount].length;
+                    const label = summaryMapping[hitCount];
+                    const summaryItem = document.createElement('div');
+                    summaryItem.className = 'bg-slate-50 p-4 rounded-lg border border-slate-200';
+                    summaryItem.innerHTML = `<span class="block text-4xl font-bold text-blue-600">${count}</span><span class="block text-sm font-medium text-slate-600 mt-1">${label}</span>`;
+                    summaryResultsDiv.appendChild(summaryItem);
+                });
+
+                detailedResultsDiv.innerHTML = '';
+                hitOrder.forEach(hitCount => {
+                    const contests = resultsByHits[hitCount];
+                    if (contests.length > 0) {
+                        contests.sort((a, b) => parseInt(b.number) - parseInt(a.number));
+                        const detailsEl = document.createElement('details');
+                        detailsEl.className = 'border border-slate-200 rounded-lg overflow-hidden';
+                        
+                        const summaryEl = document.createElement('summary');
+                        summaryEl.className = 'p-4 flex justify-between items-center font-semibold text-slate-800 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors';
+                        const label = summaryMapping[hitCount];
+                        const countText = `${contests.length} ${contests.length > 1 ? 'vezes' : 'vez'}`;
+                        const mostRecentDate = contests[0].date;
+                        
+                        summaryEl.innerHTML = `<span>${label}</span><div class="flex items-center gap-3"><span class="text-sm font-normal text-slate-500 hidden sm:inline">Mais Recente - ${mostRecentDate}</span><span class="text-base font-medium bg-slate-200 text-slate-700 px-3 py-1 rounded-full">${countText}</span></div>`;
+                        
+                        const contentDiv = document.createElement('div');
+                        contentDiv.className = 'p-4 bg-white max-h-60 overflow-y-auto';
+                        const contestList = contests.map(c => `
+                            <li class="flex justify-between items-start py-3 px-4 flex-wrap">
+                                <div class="flex-grow pr-4">
+                                    <span class="font-semibold text-slate-800">Concurso ${c.number}</span>
+                                    <span class="text-sm text-slate-500 ml-2">(${c.date})</span>
+                                    <span class="text-xs text-slate-500 block w-full mt-1">Dezenas: ${c.drawn.join(', ')}</span>
+                                </div>
+                                <span class="font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full text-sm self-center">${c.hits} acertos</span>
+                            </li>`).join('');
+                        contentDiv.innerHTML = `<ul class="divide-y divide-slate-100 -mx-4 -my-3">${contestList}</ul>`;
+                        
+                        detailsEl.appendChild(summaryEl);
+                        detailsEl.appendChild(contentDiv);
+                        detailedResultsDiv.appendChild(detailsEl);
+                    }
+                });
+                
+                if (resultsByHits[5].length > 0 || resultsByHits[4].length > 0) {
+                     generateAndDisplaySuggestion(userNumbers.length, null);
+                }
+
+                resultsSection.classList.remove('hidden');
+                resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            function handleImproveSuggestion() {
+                loader.classList.remove('hidden');
+                loader.classList.add('flex');
+                analyzeBtn.disabled = true;
+                loader.querySelector('p').textContent = 'Buscando uma sugestão melhor...';
+                setTimeout(() => {
+                    // Passa 'statsToBeat' para tentar encontrar algo estritamente melhor
+                    generateAndDisplaySuggestion(lastSuggestion.sequence.length, lastSuggestion.stats);
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                    analyzeBtn.disabled = false;
+                }, 200);
+            }
+
+            function handleRestartSuggestionSearch() {
+                 loader.classList.remove('hidden');
+                loader.classList.add('flex');
+                analyzeBtn.disabled = true;
+                loader.querySelector('p').textContent = 'Recomeçando a busca do zero...';
+                setTimeout(() => {
+                    // Passa 'null' para recomeçar a busca sem critérios anteriores
+                    generateAndDisplaySuggestion(lastSuggestion.sequence.length, null);
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                    analyzeBtn.disabled = false;
+                }, 200);
+            }
+
+            function generateAndDisplaySuggestion(sequenceLength, statsToBeat) {
+                const suggestionResult = generateSuggestion(sequenceLength, statsToBeat);
+                suggestionSection.innerHTML = '';
+                
+                if (suggestionResult && suggestionResult.sequence) {
+                    lastSuggestion = suggestionResult;
+                    const { sequence, type, stats } = suggestionResult;
+                    let descriptionText = '';
+                    if (type === 'virgin') {
+                        descriptionText = `Após uma busca exaustiva, encontramos uma sequência com ${sequenceLength} dezenas que <strong>nunca foi premiada com Quina ou Quadra</strong>.`;
+                    } else { 
+                        const lastHitText = stats.lastHitDate ? `(última no concurso ${stats.lastHit} em ${stats.lastHitDate})` : '(sem prêmios de Quadra)';
+                        descriptionText = `Sugerimos esta sequência com ${sequenceLength} dezenas. Além de <strong>nunca ter feito Quina</strong>, ela fez apenas <strong>${stats.quadraCount} Quadra(s)</strong> ${lastHitText}.`;
+                    }
+
+                    suggestionSection.innerHTML = `
+                        <h3 class="text-xl font-semibold text-slate-800 mb-3">🍀 Sugestão de Jogo</h3>
+                        <p class="text-slate-600 mb-4">${descriptionText}</p>
+                        <div class="flex flex-col sm:flex-row items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p class="text-lg font-bold text-blue-800 flex-grow text-center sm:text-left">${sequence.join(', ')}</p>
+                            <div class="flex-shrink-0 flex gap-2">
+                                <button id="analyze-current-suggestion-btn" class="w-full sm:w-auto bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors">Analisar</button>
+                                <button id="improve-suggestion-btn" class="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors">Melhorar</button>
+                            </div>
+                        </div>`;
+                    
+                    document.getElementById('analyze-current-suggestion-btn').addEventListener('click', () => {
+                        userNumbersInput.value = sequence.join(', ');
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        handleAnalysis();
+                    });
+                     document.getElementById('improve-suggestion-btn').addEventListener('click', handleImproveSuggestion);
+                } else {
+                    suggestionSection.innerHTML = `
+                        <div class="text-center">
+                            <p class="font-medium text-slate-600 mb-4">Não foi possível encontrar uma sugestão melhor com os critérios atuais.</p>
+                            <button id="restart-suggestion-btn" class="w-full sm:w-auto bg-orange-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-orange-600 transition-colors">Recomeçar Busca</button>
+                        </div>`;
+                    document.getElementById('restart-suggestion-btn').addEventListener('click', handleRestartSuggestionSearch);
+                }
+                suggestionSection.classList.remove('hidden');
+            }
+
+            function generateSuggestion(sequenceLength, statsToBeat = null) {
+                const contestDateMap = new Map(fullHistoryCache.map(c => [c.number, c.date]));
+                if (!statsToBeat) {
+                    const MAX_ATTEMPTS_VIRGIN = 250000;
+                    for (let i = 0; i < MAX_ATTEMPTS_VIRGIN; i++) {
+                        const candidateSet = new Set();
+                        while (candidateSet.size < sequenceLength) candidateSet.add(Math.floor(Math.random() * 80) + 1);
+                        const candidateArr = Array.from(candidateSet);
+                        if (checkDistribution(candidateArr).status !== 'uniform') continue;
+                        let hasForbiddenPrize = false;
+                        for (const contest of fullHistoryCache) {
+                            const hits = contest.drawn.filter(num => candidateSet.has(num)).length;
+                            if (hits >= 4) { hasForbiddenPrize = true; break; }
+                        }
+                        if (!hasForbiddenPrize) {
+                            return { sequence: candidateArr.sort((a, b) => a - b), type: 'virgin', stats: { quadraCount: 0, lastHit: 0, lastHitDate: null } };
+                        }
+                    }
+                }
+
+                const CANDIDATE_POOL_DELAYED = 20000;
+                let bestSuggestion = { sequence: null, stats: { quadraCount: Infinity, lastHit: Infinity, lastHitDate: null } };
+
+                 if (statsToBeat) {
+                    bestSuggestion.stats.quadraCount = statsToBeat.quadraCount;
+                    bestSuggestion.stats.lastHit = statsToBeat.lastHit;
+                }
+
+                for (let i = 0; i < CANDIDATE_POOL_DELAYED; i++) {
+                    const candidateSet = new Set();
+                    while (candidateSet.size < sequenceLength) candidateSet.add(Math.floor(Math.random() * 80) + 1);
+                    const candidateArr = Array.from(candidateSet);
+                    if (checkDistribution(candidateArr).status !== 'uniform') continue;
+                    
+                    let hasQuina = false, quadraCount = 0, lastHit = 0;
+                     for (const contest of fullHistoryCache) {
+                        const hits = contest.drawn.filter(num => candidateSet.has(num)).length;
+                        if (hits === 5) {
+                            hasQuina = true;
+                            break;
+                        }
+                        if (hits === 4) {
+                            quadraCount++;
+                            lastHit = Math.max(lastHit, contest.number);
+                        }
+                    }
+
+                    if (hasQuina) continue;
+
+                    const candidateStats = { quadraCount, lastHit, lastHitDate: contestDateMap.get(lastHit) || null };
+                    if (candidateStats.quadraCount < bestSuggestion.stats.quadraCount || 
+                        (candidateStats.quadraCount === bestSuggestion.stats.quadraCount && candidateStats.lastHit < bestSuggestion.stats.lastHit)) {
+                        bestSuggestion = { sequence: candidateArr, stats: candidateStats };
+                    }
+                }
+                
+                if (bestSuggestion.sequence) {
+                     if (!statsToBeat || 
+                         bestSuggestion.stats.quadraCount < statsToBeat.quadraCount ||
+                         (bestSuggestion.stats.quadraCount === statsToBeat.quadraCount && bestSuggestion.stats.lastHit < statsToBeat.lastHit)
+                        ) {
+                        return { sequence: bestSuggestion.sequence.sort((a, b) => a - b), type: 'no_quina_min_quadras', stats: bestSuggestion.stats };
+                    }
+                }
+                
+                return null;
+            }
+
+            function resetUI() {
+                loader.classList.add('hidden');
+                loader.classList.remove('flex');
+                resultsSection.classList.add('hidden');
+                errorMessageDiv.classList.add('hidden');
+                suggestionSection.classList.add('hidden');
+                distributionAnalysisDiv.innerHTML = '';
+            }
+
+            function showError(message) {
+                errorMessageDiv.textContent = message;
+                errorMessageDiv.classList.remove('hidden');
+                loader.classList.add('hidden');
+                loader.classList.remove('flex');
+            }
+        });
+    </script>
+</body>
+</html>
