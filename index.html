@@ -9,8 +9,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.5/dist/umd/supabase.min.js"></script>
+
     <style>
         /* Estilo para a fonte Inter */
         body {
@@ -89,15 +89,16 @@
 
     <script>
         // Configurações do Supabase - SUBSTITUA PELAS SUAS CREDENCIAIS
-        const SUPABASE_URL = 'https://uvqcotjcbudopyvqalsq.supabase.co'; // Ex: 'https://abcdefghijk.supabase.co'
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cWNvdGpjYnVkb3B5dnFhbHNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0OTQ2NjgsImV4cCI6MjA2NTA3MDY2OH0.QpKqTiD6I5rbq5OT9wmg8ynsOnX_VSQ-Zf62bWatwdc'; // Ex: 'eyJhbGciOiJIUzI1NiIsIn...'
-        const SUPABASE_TABLE_NAME = 'sequencia_quina2'; // O nome exato da sua tabela no Supabase
+        const SUPABASE_URL = 'https://uvqcotjcbudopyvqalsq.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cWNvdGpjYnVkb3B5dnFhbHNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0OTQ2NjgsImV4cCI6MjA2NTA3MDY2OH0.QpKqTiD6I5rbq5OT9wmg8ynsOnX_VSQ-Zf62bWatwdc';
+        const SUPABASE_TABLE_NAME = 'sequencia_quina2';
 
-        // Inicializa o cliente Supabase
-        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Inicialize o cliente Supabase AQUI. Agora que o script do CDN está no HEAD,
+        // 'Supabase' deve estar disponível globalmente neste ponto.
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Removido: const csvFileInput = document.getElementById('csv-file');
             const userNumbersInput = document.getElementById('user-numbers');
             const analyzeBtn = document.getElementById('analyze-btn');
             const loader = document.getElementById('loader');
@@ -109,7 +110,7 @@
             const suggestionSection = document.getElementById('suggestion-section');
             const numbersCounter = document.getElementById('numbers-counter');
             
-            let fullHistoryCache = []; // Os dados do histórico serão armazenados aqui
+            let fullHistoryCache = [];
             let lastSuggestion = null;
 
             // Inicia o carregamento do histórico do Supabase
@@ -143,40 +144,38 @@
                 loader.classList.remove('hidden');
                 loader.classList.add('flex');
                 loader.querySelector('p').textContent = 'Carregando histórico de concursos...';
-                analyzeBtn.disabled = true; // Desabilita o botão até o histórico ser carregado
+                analyzeBtn.disabled = true;
 
                 try {
-                    // Busca todos os concursos da tabela do Supabase
-                    const { data, error } = await supabase
+                    const { data, error } = await client
                         .from(SUPABASE_TABLE_NAME)
-                        .select('concurso, data_sorteio, n1, n2, n3, n4, n5') // Ajuste os nomes das colunas conforme seu CSV/tabela
-                        .order('concurso', { ascending: false }); // Ordena do mais recente para o mais antigo
+                        .select('concurso, data_sorteio, n1, n2, n3, n4, n5') 
+                        .order('concurso', { ascending: false });
 
                     if (error) {
                         throw error;
                     }
 
-                    // Mapeia os dados do Supabase para o formato esperado pela sua lógica
                     fullHistoryCache = data.map(row => {
                         const drawnNumbers = [
-                            parseInt(row.n1, 10),
-                            parseInt(row.n2, 10),
-                            parseInt(row.n3, 10),
-                            parseInt(row.n4, 10),
-                            parseInt(row.n5, 10)
-                        ].filter(n => !isNaN(n)); // Filtra números inválidos se houver
+                            parseInt(row.n1, 10), 
+                            parseInt(row.n2, 10), 
+                            parseInt(row.n3, 10), 
+                            parseInt(row.n4, 10), 
+                            parseInt(row.n5, 10)  
+                        ].filter(n => !isNaN(n));
 
                         if (drawnNumbers.length !== 5 || drawnNumbers.some(n => n < 1 || n > 80)) {
                              console.warn(`Dados inválidos no concurso ${row.concurso}: ${JSON.stringify(drawnNumbers)}`);
-                             return null; // Ignora linhas com dezenas inválidas
+                             return null;
                         }
 
                         return {
                             number: parseInt(row.concurso, 10),
-                            date: row.data_sorteio, // Certifique-se que o formato da data é compatível
-                            drawn: drawnNumbers.sort((a,b) => a - b) // Garante que as dezenas estejam ordenadas para consistência
+                            date: row.data_sorteio,
+                            drawn: drawnNumbers.sort((a,b) => a - b)
                         };
-                    }).filter(Boolean); // Remove quaisquer entradas nulas resultantes de dados inválidos
+                    }).filter(Boolean);
 
                     if (fullHistoryCache.length === 0) {
                         showError('Nenhum concurso válido foi encontrado no Supabase. Verifique sua tabela e o RLS.');
@@ -184,7 +183,6 @@
                     }
 
                     console.log(`Histórico de ${fullHistoryCache.length} concursos carregado do Supabase.`);
-                    // Oculta o loader e habilita o botão de análise
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
                     analyzeBtn.disabled = false;
@@ -194,16 +192,15 @@
                     showError(`Ocorreu um erro ao carregar o histórico do Supabase: ${err.message}. Verifique suas credenciais e permissões (RLS).`);
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
-                    analyzeBtn.disabled = true; // Mantém desabilitado se o carregamento falhar
+                    analyzeBtn.disabled = true;
                 }
             }
 
             function handleAnalysis() {
                 resetUI();
                 lastSuggestion = null;
-                // Removido: const file = csvFileInput.files[0];
                 const userNumbersStr = userNumbersInput.value;
-                const validationResult = validateInputs(userNumbersStr); // Ajustado para não esperar 'file'
+                const validationResult = validateInputs(userNumbersStr);
                 if (!validationResult.isValid) {
                     showError(validationResult.message);
                     return;
@@ -219,7 +216,6 @@
                 loader.classList.add('flex');
                 loader.querySelector('p').textContent = 'Analisando... por favor, aguarde.';
                 
-                // Pequeno atraso para o loader aparecer antes da análise
                 setTimeout(() => {
                     const analysis = processContests(userNumbers);
                     displayResults(analysis, userNumbers);
@@ -228,7 +224,6 @@
                 }, 200);
             }
 
-            // Removido o parâmetro 'file' da validação
             function validateInputs(numbersStr) {
                 if (!numbersStr.trim()) return { isValid: false, message: 'Por favor, insira uma sequência de números.' };
                 const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n !== '').map(n => parseInt(n, 10));
@@ -241,8 +236,6 @@
                 }
                 return { isValid: true, numbers: Array.from(uniqueNumbers) };
             }
-
-            // Removida a função 'parseCsv', pois agora carregamos do Supabase
 
             function processContests(userNumbers) {
                 const resultsByHits = { 5: [], 4: [], 3: [], 2: [] };
@@ -355,7 +348,6 @@
                 analyzeBtn.disabled = true;
                 loader.querySelector('p').textContent = 'Buscando uma sugestão melhor...';
                 setTimeout(() => {
-                    // Passa 'statsToBeat' para tentar encontrar algo estritamente melhor
                     generateAndDisplaySuggestion(lastSuggestion.sequence.length, lastSuggestion.stats);
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
@@ -369,7 +361,6 @@
                 analyzeBtn.disabled = true;
                 loader.querySelector('p').textContent = 'Recomeçando a busca do zero...';
                 setTimeout(() => {
-                    // Passa 'null' para recomeçar a busca sem critérios anteriores
                     generateAndDisplaySuggestion(lastSuggestion.sequence.length, null);
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
