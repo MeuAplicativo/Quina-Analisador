@@ -88,15 +88,17 @@
     </main>
 
     <script>
-        // Configurações do Supabase - SUBSTITUA PELAS SUAS CREDENCIAIS
+        // --- CONFIGURAÇÃO SUPABASE ---
+        // ATENÇÃO: Substitua estes valores pelos seus próprios, obtidos no painel do Supabase.
+        // A SUPABASE_ANON_KEY é segura para ser exposta em aplicações web de cliente,
+        // mas em cenários de back-end ou chaves mais sensíveis, use variáveis de ambiente.
         const SUPABASE_URL = 'https://uvqcotjcbudopyvqalsq.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cWNvdGpjYnVkb3B5dnFhbHNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0OTQ2NjgsImV4cCI6MjA2NTA3MDY2OH0.QpKqTiD6I5rbq5OT9wmg8ynsOnX_VSQ-Zf62bWatwdc';
         const SUPABASE_TABLE_NAME = 'sequencia_quina2';
 
-        // Inicialize o cliente Supabase AQUI. Agora que o script do CDN está no HEAD,
-        // 'Supabase' deve estar disponível globalmente neste ponto.
-    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+        // Inicializa o cliente Supabase.
+        // O Supabase SDK já está carregado via CDN no <head> da página.
+        const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         document.addEventListener('DOMContentLoaded', () => {
             const userNumbersInput = document.getElementById('user-numbers');
@@ -113,11 +115,13 @@
             let fullHistoryCache = [];
             let lastSuggestion = null;
 
-            // Inicia o carregamento do histórico do Supabase
+            // Inicia o carregamento do histórico do Supabase assim que a página carrega
             loadHistoryFromSupabase();
 
+            // Adiciona o evento de clique para o botão de análise
             analyzeBtn.addEventListener('click', handleAnalysis);
 
+            // Adiciona o evento para contar e validar os números enquanto o usuário digita
             userNumbersInput.addEventListener('input', () => {
                 const numbersStr = userNumbersInput.value;
                 const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n);
@@ -139,68 +143,77 @@
                 }
             });
 
+            /**
+             * Carrega o histórico de concursos da Quina do Supabase.
+             */
             async function loadHistoryFromSupabase() {
                 resetUI();
                 loader.classList.remove('hidden');
                 loader.classList.add('flex');
                 loader.querySelector('p').textContent = 'Carregando histórico de concursos...';
-                analyzeBtn.disabled = true;
+                analyzeBtn.disabled = true; // Desabilita o botão de análise enquanto carrega
 
                 try {
                     const { data, error } = await client
                         .from(SUPABASE_TABLE_NAME)
                         .select('concurso, data_sorteio, n1, n2, n3, n4, n5') 
-                        .order('concurso', { ascending: false });
+                        .order('concurso', { ascending: false }); // Pega os concursos mais recentes primeiro
 
                     if (error) {
                         throw error;
                     }
 
+                    // Mapeia os dados do Supabase para o formato esperado pela aplicação
                     fullHistoryCache = data.map(row => {
                         const drawnNumbers = [
                             parseInt(row.n1, 10), 
                             parseInt(row.n2, 10), 
                             parseInt(row.n3, 10), 
                             parseInt(row.n4, 10), 
-                            parseInt(row.n5, 10)  
-                        ].filter(n => !isNaN(n));
+                            parseInt(row.n5, 10) 
+                        ].filter(n => !isNaN(n)); // Remove valores que não são números
 
+                        // Validação básica dos números sorteados
                         if (drawnNumbers.length !== 5 || drawnNumbers.some(n => n < 1 || n > 80)) {
-                             console.warn(`Dados inválidos no concurso ${row.concurso}: ${JSON.stringify(drawnNumbers)}`);
-                             return null;
+                             console.warn(`Dados inválidos no concurso ${row.concurso}: ${JSON.stringify(drawnNumbers)}. Ignorando este concurso.`);
+                             return null; // Retorna null para filtrar depois
                         }
 
                         return {
                             number: parseInt(row.concurso, 10),
                             date: row.data_sorteio,
-                            drawn: drawnNumbers.sort((a,b) => a - b)
+                            drawn: drawnNumbers.sort((a,b) => a - b) // Garante que os números estejam ordenados
                         };
-                    }).filter(Boolean);
+                    }).filter(Boolean); // Remove as entradas nulas (concursos inválidos)
 
                     if (fullHistoryCache.length === 0) {
-                        showError('Nenhum concurso válido foi encontrado no Supabase. Verifique sua tabela e o RLS.');
+                        showError('Nenhum concurso válido foi encontrado no Supabase. Verifique sua tabela e o RLS (Row Level Security).');
                         return;
                     }
 
                     console.log(`Histórico de ${fullHistoryCache.length} concursos carregado do Supabase.`);
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
-                    analyzeBtn.disabled = false;
-
+                    analyzeBtn.disabled = false; // Habilita o botão após o carregamento
                 } catch (err) {
                     console.error('Erro ao carregar histórico do Supabase:', err.message);
                     showError(`Ocorreu um erro ao carregar o histórico do Supabase: ${err.message}. Verifique suas credenciais e permissões (RLS).`);
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
-                    analyzeBtn.disabled = true;
+                    analyzeBtn.disabled = true; // Mantém o botão desabilitado em caso de erro
                 }
             }
 
+            /**
+             * Lida com o processo de análise quando o botão é clicado.
+             */
             function handleAnalysis() {
-                resetUI();
-                lastSuggestion = null;
+                resetUI(); // Limpa a interface do usuário antes de uma nova análise
+                lastSuggestion = null; // Reinicia a última sugestão
+
                 const userNumbersStr = userNumbersInput.value;
                 const validationResult = validateInputs(userNumbersStr);
+
                 if (!validationResult.isValid) {
                     showError(validationResult.message);
                     return;
@@ -216,6 +229,7 @@
                 loader.classList.add('flex');
                 loader.querySelector('p').textContent = 'Analisando... por favor, aguarde.';
                 
+                // Usa um pequeno atraso para permitir que o spinner seja exibido
                 setTimeout(() => {
                     const analysis = processContests(userNumbers);
                     displayResults(analysis, userNumbers);
@@ -224,54 +238,85 @@
                 }, 200);
             }
 
+            /**
+             * Valida a entrada de números do usuário.
+             * @param {string} numbersStr - A string de números digitada pelo usuário.
+             * @returns {{isValid: boolean, message?: string, numbers?: number[]}} - Resultado da validação.
+             */
             function validateInputs(numbersStr) {
                 if (!numbersStr.trim()) return { isValid: false, message: 'Por favor, insira uma sequência de números.' };
                 const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n !== '').map(n => parseInt(n, 10));
+                
                 if (numbersArray.some(isNaN)) return { isValid: false, message: 'Sua sequência contém valores inválidos.' };
                 if (numbersArray.length < 5 || numbersArray.length > 15) return { isValid: false, message: 'A sequência deve conter entre 5 e 15 números.' };
+                
                 const uniqueNumbers = new Set(numbersArray);
                 if (uniqueNumbers.size !== numbersArray.length) return { isValid: false, message: 'Sua sequência contém números duplicados.' };
+                
                 for (const num of uniqueNumbers) {
                     if (num < 1 || num > 80) return { isValid: false, message: `O número ${num} está fora do intervalo válido (1 a 80).` };
                 }
-                return { isValid: true, numbers: Array.from(uniqueNumbers) };
+                return { isValid: true, numbers: Array.from(uniqueNumbers).sort((a,b) => a-b) };
             }
 
+            /**
+             * Processa os concursos históricos para encontrar acertos com os números do usuário.
+             * @param {number[]} userNumbers - Array de números do usuário.
+             * @returns {{resultsByHits: object}} - Objeto com os concursos agrupados por número de acertos.
+             */
             function processContests(userNumbers) {
-                const resultsByHits = { 5: [], 4: [], 3: [], 2: [] };
-                const userNumbersSet = new Set(userNumbers);
+                const resultsByHits = { 5: [], 4: [], 3: [], 2: [] }; // Quina, Quadra, Terno, Duque
+                const userNumbersSet = new Set(userNumbers); // Para busca mais rápida
+
                 for (const contest of fullHistoryCache) {
                     const hits = contest.drawn.filter(num => userNumbersSet.has(num)).length;
-                    if (hits >= 2) {
-                        resultsByHits[hits].push({ number: contest.number, date: contest.date, hits, drawn: contest.drawn });
+                    if (hits >= 2) { // Considera apenas acertos de 2 ou mais
+                        resultsByHits[hits].push({
+                            number: contest.number,
+                            date: contest.date,
+                            hits,
+                            drawn: contest.drawn
+                        });
                     }
                 }
                 return { resultsByHits };
             }
 
+            /**
+             * Verifica a distribuição dos números do usuário por dezenas.
+             * @param {number[]} sequence - A sequência de números a ser verificada.
+             * @returns {{status: string, decades: number[]}} - O status da distribuição e a contagem por década.
+             */
             function checkDistribution(sequence) {
-                const decades = Array(8).fill(0);
+                // Array para contar quantos números caem em cada década (1-10, 11-20, ..., 71-80)
+                const decades = Array(8).fill(0); 
                 for (const num of sequence) {
                     const decadeIndex = Math.floor((num - 1) / 10);
                     if (decadeIndex >= 0 && decadeIndex < 8) decades[decadeIndex]++;
                 }
                 const hasEmptyDecades = decades.some(count => count === 0);
-                const hasOverpopulatedDecades = decades.some(count => count > 3);
+                const hasOverpopulatedDecades = decades.some(count => count > 3); // Mais de 3 números em uma década pode ser considerado concentrado para 5-15 dezenas
 
                 let status = 'uniform';
                 if (hasEmptyDecades) {
-                    status = 'concentrated';
+                    status = 'concentrated'; // Faltando dezenas
                 } else if (hasOverpopulatedDecades) {
-                    status = 'doubtful';
+                    status = 'doubtful'; // Muitas dezenas em uma única década
                 }
                 return { status, decades };
             }
 
+            /**
+             * Exibe os resultados da análise na interface do usuário.
+             * @param {object} analysis - Os resultados da análise.
+             * @param {number[]} userNumbers - Os números que o usuário digitou.
+             */
             function displayResults(analysis, userNumbers) {
                 const { resultsByHits } = analysis;
                 const summaryMapping = { 5: 'Quina', 4: 'Quadra', 3: 'Terno', 2: 'Duque' };
                 const hitOrder = [5, 4, 3, 2];
 
+                // Exibe a análise de distribuição
                 distributionAnalysisDiv.innerHTML = '';
                 const distribution = checkDistribution(userNumbers);
                 const decadesText = distribution.decades.map((count, i) => `<strong>${i*10+1}-${(i+1)*10}</strong>: ${count}`).join(' | ');
@@ -283,12 +328,13 @@
                 } else if (distribution.status === 'doubtful') {
                     distributionDiv.classList.add('bg-yellow-50', 'text-yellow-800', 'border-yellow-200');
                     distributionDiv.innerHTML = `<p class="font-semibold">🤔 Distribuição Duvidosa</p><p class="text-sm mt-2">${decadesText}</p>`;
-                } else {
+                } else { // concentrated
                     distributionDiv.classList.add('bg-amber-50', 'text-amber-800', 'border-amber-200');
                     distributionDiv.innerHTML = `<p class="font-semibold">⚠️ Distribuição Concentrada</p><p class="text-sm mt-2">${decadesText}</p>`;
                 }
                 distributionAnalysisDiv.appendChild(distributionDiv);
 
+                // Exibe o resumo de acertos
                 summaryResultsDiv.innerHTML = '';
                 hitOrder.forEach(hitCount => {
                     const count = resultsByHits[hitCount].length;
@@ -299,11 +345,12 @@
                     summaryResultsDiv.appendChild(summaryItem);
                 });
 
+                // Exibe os resultados detalhados (concursos que tiveram acertos)
                 detailedResultsDiv.innerHTML = '';
                 hitOrder.forEach(hitCount => {
                     const contests = resultsByHits[hitCount];
                     if (contests.length > 0) {
-                        contests.sort((a, b) => parseInt(b.number) - parseInt(a.number));
+                        contests.sort((a, b) => parseInt(b.number) - parseInt(a.number)); // Ordena do mais recente para o mais antigo
                         const detailsEl = document.createElement('details');
                         detailsEl.className = 'border border-slate-200 rounded-lg overflow-hidden';
                         
@@ -311,12 +358,12 @@
                         summaryEl.className = 'p-4 flex justify-between items-center font-semibold text-slate-800 bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors';
                         const label = summaryMapping[hitCount];
                         const countText = `${contests.length} ${contests.length > 1 ? 'vezes' : 'vez'}`;
-                        const mostRecentDate = contests[0].date;
+                        const mostRecentDate = contests[0].date; // Pega a data do concurso mais recente
                         
                         summaryEl.innerHTML = `<span>${label}</span><div class="flex items-center gap-3"><span class="text-sm font-normal text-slate-500 hidden sm:inline">Mais Recente - ${mostRecentDate}</span><span class="text-base font-medium bg-slate-200 text-slate-700 px-3 py-1 rounded-full">${countText}</span></div>`;
                         
                         const contentDiv = document.createElement('div');
-                        contentDiv.className = 'p-4 bg-white max-h-60 overflow-y-auto';
+                        contentDiv.className = 'p-4 bg-white max-h-60 overflow-y-auto'; // Rolagem interna para muitos resultados
                         const contestList = contests.map(c => `
                             <li class="flex justify-between items-start py-3 px-4 flex-wrap">
                                 <div class="flex-grow pr-4">
@@ -334,14 +381,20 @@
                     }
                 });
                 
+                // Exibe a seção de sugestões se houver Quina ou Quadra na análise
                 if (resultsByHits[5].length > 0 || resultsByHits[4].length > 0) {
-                    generateAndDisplaySuggestion(userNumbers.length, null);
+                    // Inicializa a sugestão com base no tamanho da sequência do usuário
+                    generateAndDisplaySuggestion(userNumbers.length, null); 
                 }
 
                 resultsSection.classList.remove('hidden');
+                // Rola suavemente para a seção de resultados
                 resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
 
+            /**
+             * Lida com a busca por uma sugestão melhor de números.
+             */
             function handleImproveSuggestion() {
                 loader.classList.remove('hidden');
                 loader.classList.add('flex');
@@ -355,27 +408,37 @@
                 }, 200);
             }
 
+            /**
+             * Lida com a reinicialização da busca por sugestões.
+             */
             function handleRestartSuggestionSearch() {
                 loader.classList.remove('hidden');
                 loader.classList.add('flex');
                 analyzeBtn.disabled = true;
                 loader.querySelector('p').textContent = 'Recomeçando a busca do zero...';
                 setTimeout(() => {
-                    generateAndDisplaySuggestion(lastSuggestion.sequence.length, null);
+                    generateAndDisplaySuggestion(lastSuggestion.sequence.length, null); // Reinicia sem estatísticas para bater
                     loader.classList.add('hidden');
                     loader.classList.remove('flex');
                     analyzeBtn.disabled = false;
                 }, 200);
             }
 
+            /**
+             * Gera e exibe uma sugestão de nova sequência de números.
+             * @param {number} sequenceLength - O número de dezenas na sequência (5 a 15).
+             * @param {object | null} statsToBeat - Estatísticas da última sugestão para tentar superar (quadraCount, lastHit).
+             * @returns {{sequence: number[], type: string, stats: object} | null} - A sequência sugerida ou null se não encontrar.
+             */
             function generateAndDisplaySuggestion(sequenceLength, statsToBeat) {
                 const suggestionResult = generateSuggestion(sequenceLength, statsToBeat);
-                suggestionSection.innerHTML = '';
+                suggestionSection.innerHTML = ''; // Limpa a seção de sugestões
                 
                 if (suggestionResult && suggestionResult.sequence) {
-                    lastSuggestion = suggestionResult;
+                    lastSuggestion = suggestionResult; // Armazena a sugestão atual para futuras melhorias
                     const { sequence, type, stats } = suggestionResult;
                     let descriptionText = '';
+                    
                     if (type === 'virgin') {
                         descriptionText = `Após uma busca exaustiva, encontramos uma sequência com ${sequenceLength} dezenas que <strong>nunca foi premiada com Quina ou Quadra</strong>.`;
                     } else { 
@@ -394,13 +457,15 @@
                             </div>
                         </div>`;
                     
+                    // Adiciona listeners para os botões da sugestão
                     document.getElementById('analyze-current-suggestion-btn').addEventListener('click', () => {
-                        userNumbersInput.value = sequence.join(', ');
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                        handleAnalysis();
+                        userNumbersInput.value = sequence.join(', '); // Preenche a caixa de entrada
+                        window.scrollTo({ top: 0, behavior: 'smooth' }); // Rola para o topo
+                        handleAnalysis(); // Analisa a sugestão
                     });
                     document.getElementById('improve-suggestion-btn').addEventListener('click', handleImproveSuggestion);
                 } else {
+                    // Se nenhuma sugestão melhor for encontrada
                     suggestionSection.innerHTML = `
                         <div class="text-center">
                             <p class="font-medium text-slate-600 mb-4">Não foi possível encontrar uma sugestão melhor com os critérios atuais.</p>
@@ -411,29 +476,49 @@
                 suggestionSection.classList.remove('hidden');
             }
 
+            /**
+             * Lógica central para gerar uma sequência de números com base em critérios.
+             * Prioriza sequências "virgens" (sem Quina/Quadra) e depois as com menos Quadras e mais antigas.
+             * @param {number} sequenceLength - O número de dezenas a serem geradas.
+             * @param {object | null} statsToBeat - Estatísticas atuais para tentar superar (quadraCount, lastHit).
+             * @returns {{sequence: number[], type: string, stats: object} | null} A sequência sugerida e suas estatísticas, ou null.
+             */
             function generateSuggestion(sequenceLength, statsToBeat = null) {
+                // Mapeia concursos para datas para facilitar a exibição
                 const contestDateMap = new Map(fullHistoryCache.map(c => [c.number, c.date]));
-                if (!statsToBeat) {
-                    const MAX_ATTEMPTS_VIRGIN = 250000;
+
+                // Tenta encontrar uma sequência "virgem" (nunca fez Quina ou Quadra)
+                if (!statsToBeat) { // Só busca virgem se não houver statsToBeat (primeira busca ou reinício)
+                    const MAX_ATTEMPTS_VIRGIN = 250000; // Número de tentativas para encontrar uma sequência virgem
                     for (let i = 0; i < MAX_ATTEMPTS_VIRGIN; i++) {
                         const candidateSet = new Set();
                         while (candidateSet.size < sequenceLength) candidateSet.add(Math.floor(Math.random() * 80) + 1);
                         const candidateArr = Array.from(candidateSet);
+
+                        // Ignora se a distribuição não for uniforme
                         if (checkDistribution(candidateArr).status !== 'uniform') continue;
+
                         let hasForbiddenPrize = false;
+                        // Verifica se a sequência já fez Quina ou Quadra no histórico
                         for (const contest of fullHistoryCache) {
                             const hits = contest.drawn.filter(num => candidateSet.has(num)).length;
-                            if (hits >= 4) { hasForbiddenPrize = true; break; }
+                            if (hits >= 4) { // 4 ou 5 acertos (Quadra ou Quina)
+                                hasForbiddenPrize = true;
+                                break;
+                            }
                         }
+                        // Se não fez Quina ou Quadra, retorna como uma sugestão "virgem"
                         if (!hasForbiddenPrize) {
                             return { sequence: candidateArr.sort((a, b) => a - b), type: 'virgin', stats: { quadraCount: 0, lastHit: 0, lastHitDate: null } };
                         }
                     }
                 }
 
-                const CANDIDATE_POOL_DELAYED = 20000;
+                // Se não encontrar uma virgem ou se precisar melhorar uma existente, busca a que teve menos quadras ou a quadra mais antiga
+                const CANDIDATE_POOL_DELAYED = 20000; // Número de tentativas para encontrar a melhor sequência
                 let bestSuggestion = { sequence: null, stats: { quadraCount: Infinity, lastHit: Infinity, lastHitDate: null } };
 
+                // Se houver estatísticas para bater, inicializa bestSuggestion com elas
                 if (statsToBeat) {
                     bestSuggestion.stats.quadraCount = statsToBeat.quadraCount;
                     bestSuggestion.stats.lastHit = statsToBeat.lastHit;
@@ -443,30 +528,37 @@
                     const candidateSet = new Set();
                     while (candidateSet.size < sequenceLength) candidateSet.add(Math.floor(Math.random() * 80) + 1);
                     const candidateArr = Array.from(candidateSet);
+                    
+                    // Ignora se a distribuição não for uniforme
                     if (checkDistribution(candidateArr).status !== 'uniform') continue;
                     
                     let hasQuina = false, quadraCount = 0, lastHit = 0;
+                    // Analisa o histórico para a sequência candidata
                     for (const contest of fullHistoryCache) {
                         const hits = contest.drawn.filter(num => candidateSet.has(num)).length;
-                        if (hits === 5) {
+                        if (hits === 5) { // Se já fez Quina, essa sequência não serve
                             hasQuina = true;
                             break;
                         }
-                        if (hits === 4) {
+                        if (hits === 4) { // Conta as Quadras e guarda o concurso mais recente
                             quadraCount++;
                             lastHit = Math.max(lastHit, contest.number);
                         }
                     }
 
-                    if (hasQuina) continue;
+                    if (hasQuina) continue; // Pula se fez Quina
 
                     const candidateStats = { quadraCount, lastHit, lastHitDate: contestDateMap.get(lastHit) || null };
+
+                    // Compara a sequência candidata com a melhor encontrada até agora
+                    // Prioriza menos quadras, depois quadra mais antiga (menor número de concurso)
                     if (candidateStats.quadraCount < bestSuggestion.stats.quadraCount || 
                         (candidateStats.quadraCount === bestSuggestion.stats.quadraCount && candidateStats.lastHit < bestSuggestion.stats.lastHit)) {
                         bestSuggestion = { sequence: candidateArr, stats: candidateStats };
                     }
                 }
                 
+                // Retorna a melhor sugestão encontrada, se for de fato melhor que a que se queria "bater"
                 if (bestSuggestion.sequence) {
                     if (!statsToBeat || 
                         bestSuggestion.stats.quadraCount < statsToBeat.quadraCount ||
@@ -476,9 +568,12 @@
                     }
                 }
                 
-                return null;
+                return null; // Não encontrou uma sugestão que atenda aos critérios
             }
 
+            /**
+             * Reseta a interface do usuário, escondendo loaders, mensagens de erro e resultados.
+             */
             function resetUI() {
                 loader.classList.add('hidden');
                 loader.classList.remove('flex');
@@ -488,10 +583,14 @@
                 distributionAnalysisDiv.innerHTML = '';
             }
 
+            /**
+             * Exibe uma mensagem de erro na interface do usuário.
+             * @param {string} message - A mensagem de erro a ser exibida.
+             */
             function showError(message) {
                 errorMessageDiv.textContent = message;
                 errorMessageDiv.classList.remove('hidden');
-                loader.classList.add('hidden');
+                loader.classList.add('hidden'); // Esconde o loader se estiver visível
                 loader.classList.remove('flex');
             }
         });
