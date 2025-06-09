@@ -8,7 +8,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <style>
         /* Estilo para a fonte Inter */
         body {
@@ -26,7 +28,7 @@
         }
         /* Estilo para o marcador do <details> */
         summary::-webkit-details-marker {
-           display: none;
+            display: none;
         }
         summary::after {
             content: '▼';
@@ -47,67 +49,55 @@
 <body class="bg-slate-100 text-slate-800 flex items-start justify-center min-h-screen p-4 sm:p-6">
 
     <main class="w-full max-w-3xl mx-auto space-y-8">
-        <!-- Cabeçalho -->
         <header class="text-center">
             <h1 class="text-4xl font-bold text-slate-900">🎯 Analisador da Quina</h1>
-            <p class="mt-2 text-lg text-slate-600">Faça o upload do histórico e informe seus números para ver o desempenho.</p>
+            <p class="mt-2 text-lg text-slate-600">Informe seus números para ver o desempenho usando o histórico oficial.</p>
         </header>
 
-        <!-- Card de Entrada de Dados -->
         <section class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-200">
             <div class="space-y-6">
-                <!-- Upload do CSV -->
                 <div class="input-group">
-                    <label for="csv-file" class="block text-sm font-semibold mb-2 text-slate-700">1. Histórico de Concursos (.csv)</label>
-                    <input type="file" id="csv-file" accept=".csv" class="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors duration-200 cursor-pointer">
-                </div>
-
-                <!-- Entrada da Sequência -->
-                <div class="input-group">
-                    <label for="user-numbers" class="block text-sm font-semibold mb-2 text-slate-700">2. Sua Sequência (5 a 15 números)</label>
+                    <label for="user-numbers" class="block text-sm font-semibold mb-2 text-slate-700">1. Sua Sequência (5 a 15 números)</label>
                     <input type="text" id="user-numbers" placeholder="Ex: 5, 12, 25, 43, 67, 78" class="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow duration-200">
                     <p id="numbers-counter" class="text-sm text-slate-500 mt-2 text-right h-5"></p>
                 </div>
             </div>
 
-            <!-- Botão de Análise -->
-            <button id="analyze-btn" class="mt-8 w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transform hover:-translate-y-0.5 transition-all duration-200 shadow-md">
+            <button id="analyze-btn" class="mt-8 w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transform hover:-translate-y-0.5 transition-all duration-200 shadow-md" disabled>
                 Analisar Resultados
             </button>
         </section>
 
-        <!-- Indicador de Carregamento (Spinner) -->
         <div id="loader" class="hidden flex-col items-center justify-center space-y-4 py-8">
             <div class="spinner w-12 h-12 border-4 border-slate-200 rounded-full"></div>
-            <p class="text-slate-600 font-medium">Buscando sugestão...</p>
+            <p class="text-slate-600 font-medium">Carregando histórico...</p>
         </div>
 
-        <!-- Mensagem de Erro -->
         <div id="error-message" class="hidden p-4 bg-red-100 text-red-800 border-l-4 border-red-500 rounded-r-lg text-center font-medium"></div>
 
-        <!-- Seção de Resultados -->
         <section id="results-section" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-200 space-y-8">
             <h2 class="text-2xl font-bold text-slate-900 border-b-2 border-slate-200 pb-4">📊 Resumo da Análise</h2>
-            <!-- Div para a análise de distribuição -->
             <div id="distribution-analysis"></div>
-            <!-- Resumo dos Acertos -->
             <div id="summary-results" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <!-- O conteúdo do resumo será inserido aqui pelo JS -->
-            </div>
-            <!-- Detalhes dos Concursos -->
+                </div>
             <div id="detailed-results" class="space-y-4">
-                <!-- As listas suspensas serão inseridas aqui pelo JS -->
-            </div>
-             <!-- Seção de Sugestão de Jogo -->
-            <div id="suggestion-section" class="hidden pt-6 mt-6 border-t border-slate-200">
-                <!-- Conteúdo da sugestão será inserido aqui pelo JS -->
-            </div>
+                </div>
+              <div id="suggestion-section" class="hidden pt-6 mt-6 border-t border-slate-200">
+                </div>
         </section>
     </main>
 
     <script>
+        // Configurações do Supabase - SUBSTITUA PELAS SUAS CREDENCIAIS
+        const SUPABASE_URL = 'https://uvqcotjcbudopyvqalsq.supabase.co'; // Ex: 'https://abcdefghijk.supabase.co'
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2cWNvdGpjYnVkb3B5dnFhbHNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDk0OTQ2NjgsImV4cCI6MjA2NTA3MDY2OH0.QpKqTiD6I5rbq5OT9wmg8ynsOnX_VSQ-Zf62bWatwdc'; // Ex: 'eyJhbGciOiJIUzI1NiIsIn...'
+        const SUPABASE_TABLE_NAME = 'sequencia_quina2'; // O nome exato da sua tabela no Supabase
+
+        // Inicializa o cliente Supabase
+        const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         document.addEventListener('DOMContentLoaded', () => {
-            const csvFileInput = document.getElementById('csv-file');
+            // Removido: const csvFileInput = document.getElementById('csv-file');
             const userNumbersInput = document.getElementById('user-numbers');
             const analyzeBtn = document.getElementById('analyze-btn');
             const loader = document.getElementById('loader');
@@ -119,8 +109,11 @@
             const suggestionSection = document.getElementById('suggestion-section');
             const numbersCounter = document.getElementById('numbers-counter');
             
-            let fullHistoryCache = [];
+            let fullHistoryCache = []; // Os dados do histórico serão armazenados aqui
             let lastSuggestion = null;
+
+            // Inicia o carregamento do histórico do Supabase
+            loadHistoryFromSupabase();
 
             analyzeBtn.addEventListener('click', handleAnalysis);
 
@@ -145,25 +138,98 @@
                 }
             });
 
+            async function loadHistoryFromSupabase() {
+                resetUI();
+                loader.classList.remove('hidden');
+                loader.classList.add('flex');
+                loader.querySelector('p').textContent = 'Carregando histórico de concursos...';
+                analyzeBtn.disabled = true; // Desabilita o botão até o histórico ser carregado
+
+                try {
+                    // Busca todos os concursos da tabela do Supabase
+                    const { data, error } = await supabase
+                        .from(SUPABASE_TABLE_NAME)
+                        .select('concurso, data_sorteio, n1, n2, n3, n4, n5') // Ajuste os nomes das colunas conforme seu CSV/tabela
+                        .order('concurso', { ascending: false }); // Ordena do mais recente para o mais antigo
+
+                    if (error) {
+                        throw error;
+                    }
+
+                    // Mapeia os dados do Supabase para o formato esperado pela sua lógica
+                    fullHistoryCache = data.map(row => {
+                        const drawnNumbers = [
+                            parseInt(row.n1, 10),
+                            parseInt(row.n2, 10),
+                            parseInt(row.n3, 10),
+                            parseInt(row.n4, 10),
+                            parseInt(row.n5, 10)
+                        ].filter(n => !isNaN(n)); // Filtra números inválidos se houver
+
+                        if (drawnNumbers.length !== 5 || drawnNumbers.some(n => n < 1 || n > 80)) {
+                             console.warn(`Dados inválidos no concurso ${row.concurso}: ${JSON.stringify(drawnNumbers)}`);
+                             return null; // Ignora linhas com dezenas inválidas
+                        }
+
+                        return {
+                            number: parseInt(row.concurso, 10),
+                            date: row.data_sorteio, // Certifique-se que o formato da data é compatível
+                            drawn: drawnNumbers.sort((a,b) => a - b) // Garante que as dezenas estejam ordenadas para consistência
+                        };
+                    }).filter(Boolean); // Remove quaisquer entradas nulas resultantes de dados inválidos
+
+                    if (fullHistoryCache.length === 0) {
+                        showError('Nenhum concurso válido foi encontrado no Supabase. Verifique sua tabela e o RLS.');
+                        return;
+                    }
+
+                    console.log(`Histórico de ${fullHistoryCache.length} concursos carregado do Supabase.`);
+                    // Oculta o loader e habilita o botão de análise
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                    analyzeBtn.disabled = false;
+
+                } catch (err) {
+                    console.error('Erro ao carregar histórico do Supabase:', err.message);
+                    showError(`Ocorreu um erro ao carregar o histórico do Supabase: ${err.message}. Verifique suas credenciais e permissões (RLS).`);
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                    analyzeBtn.disabled = true; // Mantém desabilitado se o carregamento falhar
+                }
+            }
+
             function handleAnalysis() {
                 resetUI();
                 lastSuggestion = null;
-                const file = csvFileInput.files[0];
+                // Removido: const file = csvFileInput.files[0];
                 const userNumbersStr = userNumbersInput.value;
-                const validationResult = validateInputs(file, userNumbersStr);
+                const validationResult = validateInputs(userNumbersStr); // Ajustado para não esperar 'file'
                 if (!validationResult.isValid) {
                     showError(validationResult.message);
                     return;
                 }
                 const userNumbers = validationResult.numbers;
+
+                if (fullHistoryCache.length === 0) {
+                    showError('Histórico de concursos não carregado. Por favor, recarregue a página.');
+                    return;
+                }
+
                 loader.classList.remove('hidden');
                 loader.classList.add('flex');
                 loader.querySelector('p').textContent = 'Analisando... por favor, aguarde.';
-                setTimeout(() => parseCsv(file, userNumbers), 200);
+                
+                // Pequeno atraso para o loader aparecer antes da análise
+                setTimeout(() => {
+                    const analysis = processContests(userNumbers);
+                    displayResults(analysis, userNumbers);
+                    loader.classList.add('hidden');
+                    loader.classList.remove('flex');
+                }, 200);
             }
 
-            function validateInputs(file, numbersStr) {
-                if (!file) return { isValid: false, message: 'Por favor, selecione um arquivo CSV.' };
+            // Removido o parâmetro 'file' da validação
+            function validateInputs(numbersStr) {
                 if (!numbersStr.trim()) return { isValid: false, message: 'Por favor, insira uma sequência de números.' };
                 const numbersArray = numbersStr.split(',').map(n => n.trim()).filter(n => n !== '').map(n => parseInt(n, 10));
                 if (numbersArray.some(isNaN)) return { isValid: false, message: 'Sua sequência contém valores inválidos.' };
@@ -176,40 +242,8 @@
                 return { isValid: true, numbers: Array.from(uniqueNumbers) };
             }
 
-            function parseCsv(file, userNumbers) {
-                analyzeBtn.disabled = true; // Desativa o botão principal
-                Papa.parse(file, {
-                    complete: (results) => {
-                        loader.classList.add('hidden');
-                        loader.classList.remove('flex');
-                        fullHistoryCache = results.data
-                            .map(row => {
-                                if (row.length < 7) return null;
-                                const contestNumber = parseInt(row[0], 10);
-                                if (isNaN(contestNumber)) return null;
-                                const drawnNumbers = row.slice(2, 7).map(n => parseInt(n, 10));
-                                if (drawnNumbers.length !== 5 || drawnNumbers.some(n => isNaN(n) || n < 1 || n > 80)) return null;
-                                return { number: contestNumber, date: row[1], drawn: drawnNumbers };
-                            }).filter(Boolean);
-                        if (fullHistoryCache.length === 0) {
-                            showError('Nenhum concurso válido foi encontrado no arquivo CSV. Verifique o formato.');
-                            analyzeBtn.disabled = false; // Reativa em caso de erro
-                            return;
-                        }
-                        const analysis = processContests(userNumbers);
-                        displayResults(analysis, userNumbers);
-                        analyzeBtn.disabled = false; // Reativa após o sucesso
-                    },
-                    error: (err) => {
-                        loader.classList.add('hidden');
-                        loader.classList.remove('flex');
-                        showError(`Ocorreu um erro ao ler o arquivo CSV: ${err.message}`);
-                        analyzeBtn.disabled = false; // Reativa em caso de erro
-                    },
-                    skipEmptyLines: true,
-                });
-            }
-            
+            // Removida a função 'parseCsv', pois agora carregamos do Supabase
+
             function processContests(userNumbers) {
                 const resultsByHits = { 5: [], 4: [], 3: [], 2: [] };
                 const userNumbersSet = new Set(userNumbers);
@@ -308,7 +342,7 @@
                 });
                 
                 if (resultsByHits[5].length > 0 || resultsByHits[4].length > 0) {
-                     generateAndDisplaySuggestion(userNumbers.length, null);
+                    generateAndDisplaySuggestion(userNumbers.length, null);
                 }
 
                 resultsSection.classList.remove('hidden');
@@ -330,7 +364,7 @@
             }
 
             function handleRestartSuggestionSearch() {
-                 loader.classList.remove('hidden');
+                loader.classList.remove('hidden');
                 loader.classList.add('flex');
                 analyzeBtn.disabled = true;
                 loader.querySelector('p').textContent = 'Recomeçando a busca do zero...';
@@ -374,7 +408,7 @@
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                         handleAnalysis();
                     });
-                     document.getElementById('improve-suggestion-btn').addEventListener('click', handleImproveSuggestion);
+                    document.getElementById('improve-suggestion-btn').addEventListener('click', handleImproveSuggestion);
                 } else {
                     suggestionSection.innerHTML = `
                         <div class="text-center">
@@ -409,7 +443,7 @@
                 const CANDIDATE_POOL_DELAYED = 20000;
                 let bestSuggestion = { sequence: null, stats: { quadraCount: Infinity, lastHit: Infinity, lastHitDate: null } };
 
-                 if (statsToBeat) {
+                if (statsToBeat) {
                     bestSuggestion.stats.quadraCount = statsToBeat.quadraCount;
                     bestSuggestion.stats.lastHit = statsToBeat.lastHit;
                 }
@@ -421,7 +455,7 @@
                     if (checkDistribution(candidateArr).status !== 'uniform') continue;
                     
                     let hasQuina = false, quadraCount = 0, lastHit = 0;
-                     for (const contest of fullHistoryCache) {
+                    for (const contest of fullHistoryCache) {
                         const hits = contest.drawn.filter(num => candidateSet.has(num)).length;
                         if (hits === 5) {
                             hasQuina = true;
@@ -443,9 +477,9 @@
                 }
                 
                 if (bestSuggestion.sequence) {
-                     if (!statsToBeat || 
-                         bestSuggestion.stats.quadraCount < statsToBeat.quadraCount ||
-                         (bestSuggestion.stats.quadraCount === statsToBeat.quadraCount && bestSuggestion.stats.lastHit < statsToBeat.lastHit)
+                    if (!statsToBeat || 
+                        bestSuggestion.stats.quadraCount < statsToBeat.quadraCount ||
+                        (bestSuggestion.stats.quadraCount === statsToBeat.quadraCount && bestSuggestion.stats.lastHit < statsToBeat.lastHit)
                         ) {
                         return { sequence: bestSuggestion.sequence.sort((a, b) => a - b), type: 'no_quina_min_quadras', stats: bestSuggestion.stats };
                     }
